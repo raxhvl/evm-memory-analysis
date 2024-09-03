@@ -1,0 +1,10 @@
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+
+.env
+
+# mis
+*.log
