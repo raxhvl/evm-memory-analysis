@@ -11,6 +11,7 @@ load_dotenv(override=True)
 EVM_WORD_SIZE = 32
 DATA_DIR = "data"
 CACHE_DIR = os.path.join(DATA_DIR, ".cache")
+MAX_THREAD_WORKERS = 10
 
 # Retrieve the RPC endpoint from environment variables
 RPC_ENDPOINT = os.getenv("RPC_ENDPOINT")
@@ -68,7 +69,9 @@ def process_block(block_number, start_block, total_blocks):
         transactions = get_transactions_from_block(block_hex)
         transactions_count = len(transactions)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=MAX_THREAD_WORKERS
+        ) as executor:
             futures = []
             for tx in transactions:
                 future = executor.submit(
@@ -178,7 +181,9 @@ def trace_memory(start_block, end_block):
         os.makedirs(CACHE_DIR)
 
     # Process blocks in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=MAX_THREAD_WORKERS
+    ) as executor:
         futures = []
         for block_number in range(start_block, end_block + 1):
             future = executor.submit(
