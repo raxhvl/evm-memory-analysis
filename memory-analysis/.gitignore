@@ -8,5 +8,4 @@ dmypy.json
 
 # mis
 *.log
-data/.cache
-data_old
+data
