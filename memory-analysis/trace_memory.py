@@ -3,22 +3,21 @@ import csv
 import requests
 import argparse
 from dotenv import load_dotenv
-import time
+import concurrent.futures
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 EVM_WORD_SIZE = 32
+DATA_DIR = "data"
+CACHE_DIR = os.path.join(DATA_DIR, ".cache")
 
 # Retrieve the RPC endpoint from environment variables
 RPC_ENDPOINT = os.getenv("RPC_ENDPOINT")
+print(RPC_ENDPOINT)
 API_KEY = os.getenv("RPC_API_KEY")
 if not RPC_ENDPOINT:
     raise ValueError("RPC_ENDPOINT not found in environment file")
-
-# Ensure data directory exists
-if not os.path.exists("data"):
-    os.makedirs("data")
 
 
 # Function to call Ethereum JSON-RPC API
@@ -56,9 +55,88 @@ def is_memory_instruction(trace):
     return trace["op"] in ["MSTORE8", "MSTORE", "MLOAD"]
 
 
-# Function to process the transactions and write to CSV
-def process_transactions(start_block, end_block):
-    file_name = f"data/memory_trace_{start_block}_to_{end_block}.csv"
+# Process a single block
+def process_block(block_number, start_block, total_blocks):
+    try:
+        progress_percentage = (
+            (block_number - start_block + 1) / total_blocks
+        ) * 100
+
+        print(f"Processing {block_number} [{progress_percentage:.2f}%]...")
+
+        block_hex = hex(block_number)
+        transactions = get_transactions_from_block(block_hex)
+        transactions_count = len(transactions)
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            for tx in transactions:
+                future = executor.submit(
+                    process_transaction, block_number, tx, transactions_count
+                )
+                futures.append(future)
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"[Task] Transaction processing failed: {e}")
+
+    except Exception as e:
+        print(f"Failed to fetch txs from block {block_number}: {e}")
+
+
+def process_transaction(block_number, tx, transactions_count):
+    try:
+        tx_hash = tx["hash"]
+        tx_gas = int(tx["gas"], 0)
+        tx_index = int(tx["transactionIndex"], 0) + 1
+        tx_to = tx["to"]
+
+        print(f"Tracing tx {tx_hash}[{tx_index}/{transactions_count}]...")
+
+        trace_data = trace_transaction(tx_hash)
+
+        # Write the tx trace to cache file
+        cache_path = os.path.join(CACHE_DIR, str(block_number), str(tx_index))
+        os.makedirs(
+            os.path.dirname(cache_path), exist_ok=True
+        )  # Ensure the directory exists
+
+        with open(cache_path, "w", newline="") as cache:
+            writer = csv.writer(cache)
+
+            for index, trace in enumerate(trace_data["structLogs"]):
+                if is_memory_instruction(trace):
+                    next_trace = trace_data["structLogs"][index + 1]
+                    pre_memory = len(trace["memory"]) * EVM_WORD_SIZE
+                    post_memory = len(next_trace["memory"]) * EVM_WORD_SIZE
+                    expansion = post_memory - pre_memory
+                    memory_offset = int(trace["stack"][-1], 0)
+                    row = {
+                        "block": block_number,
+                        "tx_hash": tx_hash,
+                        "tx_gas": tx_gas,
+                        "to": tx_to,
+                        "call_depth": trace["depth"],
+                        "memory_instruction": trace["op"],
+                        "memory_access_offset": memory_offset,
+                        "memory_gas_cost": trace["gasCost"],
+                        "pre_active_memory_size": pre_memory,
+                        "post_active_memory_size": post_memory,
+                        "memory_expansion": expansion,
+                    }
+                    writer.writerow(row.values())
+    except Exception as e:
+        print(f"Failed to trace tx: {block_number} >> {tx['hash']}: {e}")
+
+
+# Compile all the result from cache file
+def compile_result(start_block, end_block):
+    print("Compiling results...")
+
+    file_name = f"{DATA_DIR}/memory_trace_{start_block}_to_{end_block}.csv"
+
     with open(file_name, "w", newline="") as csv_file:
         fieldnames = [
             "block",
@@ -76,61 +154,46 @@ def process_transactions(start_block, end_block):
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
 
-        total_blocks = end_block - start_block + 1
-
         for block_number in range(start_block, end_block + 1):
+            block_cache_dir = os.path.join(CACHE_DIR, str(block_number))
+            if os.path.exists(block_cache_dir):
+                sorted_cache = sorted(map(int, os.listdir(block_cache_dir)))
+                sorted_cache = map(str, sorted_cache)
+                for file_name in sorted_cache:
+                    file_path = os.path.join(block_cache_dir, file_name)
+                    with open(file_path, "r") as f:
+                        row = f.read()
+                        csv_file.write(row)
 
-            progress_percentage = (
-                (block_number - start_block + 1) / total_blocks
-            ) * 100
+    # os.rmdir(CACHE_DIR)
+    print("Tracing complete 🎉")
 
-            print(f"Processing {block_number} [{progress_percentage:.2f}%]...")
 
-            start_time = time.time()
-            block_hex = hex(block_number)
-            transactions = get_transactions_from_block(block_hex)
-            transactions_count = len(transactions)
-            for tx in transactions:
-                tx_hash = tx["hash"]
-                tx_gas = int(tx["gas"], 0)
-                tx_index = int(tx["transactionIndex"], 0) + 1
-                tx_to = tx["to"]
+# Trace memory trends for given range of blocks
+def trace_memory(start_block, end_block):
+    total_blocks = end_block - start_block + 1
 
-                print(
-                    f"Tracing tx {tx_hash}[{tx_index}/{transactions_count}]..."
-                )
+    # Setup up cache
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
 
-                trace_data = trace_transaction(tx_hash)
-
-                for index, trace in enumerate(trace_data["structLogs"]):
-                    if is_memory_instruction(trace):
-                        next_trace = trace_data["structLogs"][index + 1]
-                        pre_memory = len(trace["memory"]) * EVM_WORD_SIZE
-                        post_memory = len(next_trace["memory"]) * EVM_WORD_SIZE
-                        expansion = post_memory - pre_memory
-                        memory_offset = int(trace["stack"][-1], 0)
-                        row = {
-                            "block": block_number,
-                            "tx_hash": tx_hash,
-                            "tx_gas": tx_gas,
-                            "to": tx_to,
-                            "call_depth": trace["depth"],
-                            "memory_instruction": trace["op"],
-                            "memory_access_offset": memory_offset,
-                            "memory_gas_cost": trace["gasCost"],
-                            "pre_active_memory_size": pre_memory,
-                            "post_active_memory_size": post_memory,
-                            "memory_expansion": expansion,
-                        }
-                        writer.writerow(row)
-
-            elapsed_time = time.time() - start_time
-            print(
-                f"Processed block {block_number} in {elapsed_time:.2f} seconds"
-                "\n"
-                "****"
-                "\n"
+    # Process blocks in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for block_number in range(start_block, end_block + 1):
+            future = executor.submit(
+                process_block, block_number, start_block, total_blocks
             )
+            futures.append(future)
+
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"[Task] Block processing failed: {e}")
+
+    # Compile the result once all blocks are processed
+    compile_result(start_block, end_block)
 
 
 # Command-line arguments parsing
@@ -148,4 +211,4 @@ if __name__ == "__main__":
             "Start block should be less than or equal to end block number"
         )
 
-    process_transactions(start_block, end_block)
+    trace_memory(start_block, end_block)
