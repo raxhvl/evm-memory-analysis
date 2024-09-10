@@ -1,204 +1,159 @@
+import asyncio
+from aiohttp import ClientSession, TCPConnector
+from dotenv import load_dotenv
 import os
 import csv
-import requests
 import argparse
-from dotenv import load_dotenv
-import concurrent.futures
+import sys
+import pypeln as pl
 
 # Load environment variables from .env file
 load_dotenv(override=True)
 
 EVM_WORD_SIZE = 32
 DATA_DIR = "data"
-CACHE_DIR = os.path.join(DATA_DIR, ".cache")
-MAX_THREAD_WORKERS = 10
+WORKERS = 1000
 
 # Retrieve the RPC endpoint from environment variables
 RPC_ENDPOINT = os.getenv("RPC_ENDPOINT")
-print(RPC_ENDPOINT)
 API_KEY = os.getenv("RPC_API_KEY")
 if not RPC_ENDPOINT:
     raise ValueError("RPC_ENDPOINT not found in environment file")
 
 
 # Function to call Ethereum JSON-RPC API
-def call_rpc(method, params):
-    response = requests.post(
+async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
+    """
+    Call the Ethereum JSON-RPC API.
+
+    Args:
+        method (str): The JSON-RPC method to call.
+        params (list): Parameters for the JSON-RPC method.
+        session (aiohttp.ClientSession): The aiohttp session to use for the request.
+
+    Returns:
+        dict: The result of the RPC call.
+
+    Raises:
+        Exception: If there is an error in the RPC response.
+    """
+    payload = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": 1,
+    }
+
+    async with session.post(
         RPC_ENDPOINT,
         headers={"x-api-key": API_KEY},
-        json={
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1,
-        },
-    )
-    response.raise_for_status()
-    result = response.json()
-    if "error" in result:
-        raise Exception(f"RPC Error: {result['error']}")
-    return result["result"]
+        json=payload,
+    ) as response:
+        result = await response.json()
+        if "error" in result:
+            raise Exception(f"RPC Error: {result['error']}")
+        return result.get("result")
 
 
 # Function to get transactions from a block
-def get_transactions_from_block(block_number):
-    return call_rpc("eth_getBlockByNumber", [block_number, True])[
+async def get_blocks(block_number, session):
+    return (await call_rpc("eth_getBlockByNumber", [block_number, True], session))[
         "transactions"
     ]
 
 
 # Function to trace a transaction
-def trace_transaction(tx_hash):
-    return call_rpc("debug_traceTransaction", [tx_hash, {"enableMemory": True}])
+async def trace_transaction(tx_hash, session):
+    return await call_rpc(
+        "debug_traceTransaction", [tx_hash, {"enableMemory": True}], session
+    )
 
 
 def is_memory_instruction(trace):
     return trace["op"] in ["MSTORE8", "MSTORE", "MLOAD"]
 
 
-# Process a single block
-def process_block(block_number, start_block, total_blocks):
-    try:
-        progress_percentage = (
-            (block_number - start_block + 1) / total_blocks
-        ) * 100
+async def get_blocks(start_block, end_block):
+    block_numbers = list(range(start_block, end_block + 1))
 
-        print(f"Processing {block_number} [{progress_percentage:.2f}%]...")
+    async with ClientSession(connector=TCPConnector(limit=0)) as session:
+        blocks = []
 
-        block_hex = hex(block_number)
-        transactions = get_transactions_from_block(block_hex)
-        transactions_count = len(transactions)
+        async def fetch(block_number):
+            result = await get_blocks(block_number, session)
+            transactions = [
+                {"hash": tx.get("hash"), "to": tx.get("to"), "gas": tx.get("gas")}
+                for tx in result
+            ]
+            blocks.append({"block_number": block_number, "transactions": transactions})
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=MAX_THREAD_WORKERS
-        ) as executor:
-            futures = []
-            for tx in transactions:
-                future = executor.submit(
-                    process_transaction, block_number, tx, transactions_count
-                )
-                futures.append(future)
+        await pl.task.each(
+            fetch,
+            block_numbers,
+            workers=WORKERS,
+        )
 
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"[Task] Transaction processing failed: {e}")
-
-    except Exception as e:
-        print(f"Failed to fetch txs from block {block_number}: {e}")
+        return blocks
 
 
-def process_transaction(block_number, tx, transactions_count):
+async def trace_transaction(block_number, tx, writer):
     try:
         tx_hash = tx["hash"]
         tx_gas = int(tx["gas"], 0)
-        tx_index = int(tx["transactionIndex"], 0) + 1
         tx_to = tx["to"]
 
-        print(f"Tracing tx {tx_hash}[{tx_index}/{transactions_count}]...")
+        trace_data = await trace_transaction(tx_hash)
 
-        trace_data = trace_transaction(tx_hash)
-
-        # Write the tx trace to cache file
-        cache_path = os.path.join(CACHE_DIR, str(block_number), str(tx_index))
-        os.makedirs(
-            os.path.dirname(cache_path), exist_ok=True
-        )  # Ensure the directory exists
-
-        with open(cache_path, "w", newline="") as cache:
-            writer = csv.writer(cache)
-
-            for index, trace in enumerate(trace_data["structLogs"]):
-                if is_memory_instruction(trace):
-                    next_trace = trace_data["structLogs"][index + 1]
-                    pre_memory = len(trace["memory"]) * EVM_WORD_SIZE
-                    post_memory = len(next_trace["memory"]) * EVM_WORD_SIZE
-                    expansion = post_memory - pre_memory
-                    memory_offset = int(trace["stack"][-1], 0)
-                    row = {
-                        "block": block_number,
-                        "tx_hash": tx_hash,
-                        "tx_gas": tx_gas,
-                        "to": tx_to,
-                        "call_depth": trace["depth"],
-                        "memory_instruction": trace["op"],
-                        "memory_access_offset": memory_offset,
-                        "memory_gas_cost": trace["gasCost"],
-                        "pre_active_memory_size": pre_memory,
-                        "post_active_memory_size": post_memory,
-                        "memory_expansion": expansion,
-                    }
-                    writer.writerow(row.values())
+        for index, trace in enumerate(trace_data["structLogs"]):
+            if is_memory_instruction(trace):
+                next_trace = trace_data["structLogs"][index + 1]
+                pre_memory = len(trace["memory"]) * EVM_WORD_SIZE
+                post_memory = len(next_trace["memory"]) * EVM_WORD_SIZE
+                expansion = post_memory - pre_memory
+                memory_offset = int(trace["stack"][-1], 0)
+                row = {
+                    "block": block_number,
+                    "tx_hash": tx_hash,
+                    "tx_gas": tx_gas,
+                    "to": tx_to,
+                    "call_depth": trace["depth"],
+                    "memory_instruction": trace["op"],
+                    "memory_access_offset": memory_offset,
+                    "memory_gas_cost": trace["gasCost"],
+                    "pre_active_memory_size": pre_memory,
+                    "post_active_memory_size": post_memory,
+                    "memory_expansion": expansion,
+                }
+                writer.writerow(row.values())
     except Exception as e:
-        print(f"Failed to trace tx: {block_number} >> {tx['hash']}: {e}")
+        print(f"Failed to trace tx:  {tx['hash']}: {e}")
 
 
-# Compile all the result from cache file
-def compile_result(start_block, end_block):
-    print("Compiling results...")
+def write_blocks_to_disk(blocks):
 
-    file_name = f"{DATA_DIR}/memory_trace_{start_block}_to_{end_block}.csv"
-
-    with open(file_name, "w", newline="") as csv_file:
-        fieldnames = [
-            "block",
-            "tx_hash",
-            "tx_gas",
-            "to",
-            "call_depth",
-            "memory_instruction",
-            "memory_access_offset",
-            "memory_gas_cost",
-            "pre_active_memory_size",
-            "post_active_memory_size",
-            "memory_expansion",
-        ]
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+    with open(f"data/fragment_tx.csv", "w", newline="") as csv_file:
+        fieldnames = ["id", "block", "tx_hash", "tx_gas", "to"]
+        writer = csv.DictWriter(
+            csv_file, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n"
+        )
         writer.writeheader()
-
-        for block_number in range(start_block, end_block + 1):
-            block_cache_dir = os.path.join(CACHE_DIR, str(block_number))
-            if os.path.exists(block_cache_dir):
-                sorted_cache = sorted(map(int, os.listdir(block_cache_dir)))
-                sorted_cache = map(str, sorted_cache)
-                for file_name in sorted_cache:
-                    file_path = os.path.join(block_cache_dir, file_name)
-                    with open(file_path, "r") as f:
-                        row = f.read()
-                        csv_file.write(row)
-
-    # os.rmdir(CACHE_DIR)
-    print("Tracing complete 🎉")
+        tx_id = 1
+        for block in blocks:
+            for tx in block["transactions"]:
+                tx["id"] = tx_id
+                writer.writerow(tx)
 
 
 # Trace memory trends for given range of blocks
-def trace_memory(start_block, end_block):
+async def trace_memory(start_block, end_block):
     total_blocks = end_block - start_block + 1
 
-    # Setup up cache
-    if not os.path.exists(CACHE_DIR):
-        os.makedirs(CACHE_DIR)
+    # Get transactions
+    blocks = await get_blocks(start_block, end_block)
 
-    # Process blocks in parallel
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=MAX_THREAD_WORKERS
-    ) as executor:
-        futures = []
-        for block_number in range(start_block, end_block + 1):
-            future = executor.submit(
-                process_block, block_number, start_block, total_blocks
-            )
-            futures.append(future)
+    write_blocks_to_disk(blocks)
 
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                print(f"[Task] Block processing failed: {e}")
-
-    # Compile the result once all blocks are processed
-    compile_result(start_block, end_block)
+    trace_transaction(blocks)
 
 
 # Command-line arguments parsing
@@ -212,8 +167,6 @@ if __name__ == "__main__":
     end_block = args.end_block
 
     if start_block > end_block:
-        raise ValueError(
-            "Start block should be less than or equal to end block number"
-        )
+        raise ValueError("Start block should be less than or equal to end block number")
 
-    trace_memory(start_block, end_block)
+    asyncio.run(trace_memory(start_block, end_block))

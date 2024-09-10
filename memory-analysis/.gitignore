@@ -3,6 +3,12 @@
 .dmypy.json
 dmypy.json
 
+# python environment
+.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
 
 .env
 
