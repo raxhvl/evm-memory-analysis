@@ -1,6 +1,10 @@
 import argparse
 import asyncio
+import datetime
 import logging
+import time
+
+import psutil
 
 from tracer.chain import get_call_frames_from_transaction, get_transactions_from_block
 from tracer.fs import CSVIterator, FileType, OutputHandler
@@ -9,7 +13,7 @@ from tracer.pipeline import schedule_rpc_tasks
 # Configure logging
 logging.basicConfig(
     filename="trace.log",
-    level=logging.ERROR,  # Only log ERROR and higher levels
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     filemode="a",  # Append mode
 )
@@ -115,5 +119,18 @@ if __name__ == "__main__":
     if start_block > end_block:
         raise ValueError("Start block should be less than or equal to end block number")
 
+    # Measure time, memory, and CPU consumption
+    start_time = time.perf_counter()
+    process = psutil.Process()  # Current process
+
     # Run the tracing process
     asyncio.run(trace_memory(start_block, end_block))
+
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    memory_usage = process.memory_info().rss / (1024 * 1024)  # Convert bytes to MB
+    cpu_usage = process.cpu_percent(interval=1.0)  # Get CPU usage percentage
+
+    logging.info(f"⏲️ Processing time: {str(datetime.timedelta(seconds=elapsed_time))}")
+    logging.info(f"💾 Memory usage: {memory_usage:.2f} MB")
+    logging.info(f"🧠 CPU usage: {cpu_usage:.2f}%")
