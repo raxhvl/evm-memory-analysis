@@ -3,7 +3,7 @@ import gzip
 import os
 import shutil
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 from tracer.config import DATA_DIR
 
@@ -14,7 +14,7 @@ class FileType(Enum):
     CALL_FRAME = "call_frames"
 
 
-class Handler:
+class OutputHandler:
     def __init__(self, start_block: int, end_block: int, file_type: FileType):
         """
         Initialize the Handler instance for a specific file type.
@@ -27,8 +27,9 @@ class Handler:
         self.start_block = start_block
         self.end_block = end_block
         self.file_type = file_type
-        self.directory = os.path.join(DATA_DIR, f"from_{self.start_block}_to_{self.end_block}")
+        self.directory = os.path.join(DATA_DIR, f"{self.start_block}_to_{self.end_block}")
         self.file_name = os.path.join(self.directory, f"{self.file_type.value}.csv")
+        self.compressed_file_name = f"{self.file_name}.gz"
 
         # Ensure the directory exists
         os.makedirs(self.directory, exist_ok=True)
@@ -48,7 +49,16 @@ class Handler:
         # Define fieldnames based on file type
         fieldnames = {
             FileType.TRANSACTION: ["id", "block", "tx_hash", "tx_gas", "to"],
-            FileType.CALL_FRAME: ["id", "function", "line_number", "file"],
+            FileType.CALL_FRAME: [
+                "transaction_id",
+                "call_depth",
+                "memory_instruction",
+                "memory_access_offset",
+                "memory_gas_cost",
+                "pre_active_memory_size",
+                "post_active_memory_size",
+                "memory_expansion",
+            ],
         }.get(self.file_type, [])
 
         if not fieldnames:
@@ -72,8 +82,11 @@ class Handler:
         """
         Compress the CSV file into a gzip format and remove the original file.
         """
+        # Important to close the file so that buffers are written to disk
+        self.csv_file.close()
+
         with open(self.file_name, "rb") as f_in:
-            with gzip.open(f"{self.file_name}.gz", "wb") as f_out:
+            with gzip.open(self.compressed_file_name, "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
         delete_source and os.remove(self.file_name)
 
@@ -81,5 +94,48 @@ class Handler:
         """
         Ensure the CSV file is closed properly when the instance is deleted.
         """
-        if hasattr(self, "csv_file"):
-            self.csv_file.close()
+        self.csv_file.close()
+
+
+class CSVIterator:
+    def __init__(self, file_path: str):
+        """
+        Initialize the CSVIterator instance.
+
+        Args:
+            file_path (str): Path to the gzip-compressed CSV file.
+        """
+        self.file_path = file_path
+        self._file = None
+        self._csv_reader = None
+        self.header = None
+
+    def __enter__(self):
+        """
+        Enter the runtime context related to this object.
+        """
+        self._file = gzip.open(self.file_path, "rt", encoding="utf-8")
+        self._csv_reader = csv.reader(self._file)
+        self.header = next(self._csv_reader)  # Read and skip the header row
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Exit the runtime context related to this object.
+        """
+        if self._file:
+            self._file.close()
+
+    def __iter__(self) -> Iterator[Dict[str, str]]:
+        """
+        Return an iterator over the rows of the CSV file, skipping the header.
+
+        Returns:
+            Iterator[Dict[str, str]]: An iterator over the CSV rows as dictionaries.
+        """
+        if self._csv_reader is None:
+            raise RuntimeError("Iterator not initialized. Ensure you use the context manager.")
+
+        # Process each row, skipping the header
+        for row in self._csv_reader:
+            yield dict(zip(self.header, row))

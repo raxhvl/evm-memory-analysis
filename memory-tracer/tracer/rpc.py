@@ -68,6 +68,4 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
     Returns:
         dict: The trace result of the transaction.
     """
-    return await call_rpc(
-        "debug_traceTransaction", [tx_hash, {"enableMemory": True}], session
-    )
+    return await call_rpc("debug_traceTransaction", [tx_hash, {"enableMemory": True}], session)

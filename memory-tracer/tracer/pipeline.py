@@ -9,7 +9,6 @@ async def schedule_rpc_tasks(task, stage):
     async with ClientSession(connector=TCPConnector(limit=0)) as session:
 
         async def f(arg):
-            print("processing", arg)
             await task(arg, session)
 
         await pl.task.each(
