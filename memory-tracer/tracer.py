@@ -1,9 +1,18 @@
 import argparse
 import asyncio
+import logging
 
 from tracer.chain import get_call_frames_from_transaction, get_transactions_from_block
 from tracer.fs import CSVIterator, FileType, OutputHandler
 from tracer.pipeline import schedule_rpc_tasks
+
+# Configure logging
+logging.basicConfig(
+    filename="trace.log",
+    level=logging.ERROR,  # Only log ERROR and higher levels
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    filemode="a",  # Append mode
+)
 
 
 async def save_transactions(start_block: int, end_block: int) -> str:
@@ -82,12 +91,15 @@ async def trace_memory(start_block: int, end_block: int) -> None:
         start_block (int): The starting block number.
         end_block (int): The ending block number.
     """
-    # Save transactions to a compressed csv file and get its path.
-    tx_file = await save_transactions(start_block, end_block)
+    try:
+        # Save transactions to a compressed csv file and get its path.
+        tx_file = await save_transactions(start_block, end_block)
 
-    # Process the transactions to save call frames
-    with CSVIterator(tx_file) as transaction_iterator:
-        await save_call_frames(start_block, end_block, transaction_iterator)
+        # Process the transactions to save call frames
+        with CSVIterator(tx_file) as transaction_iterator:
+            await save_call_frames(start_block, end_block, transaction_iterator)
+    except Exception as e:
+        logging.error(f"Error tracing memory for blocks {start_block}-{end_block}: {e}")
 
 
 # Command-line arguments parsing
