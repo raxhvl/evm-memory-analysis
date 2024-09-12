@@ -23,7 +23,7 @@ async def call_ipc(method: str, params: list, session: AsyncWeb3) -> dict:
 
     if "error" in result:
         raise Exception(f"IPC Error: {result['error']}")
-    return result.get("result")
+    return result
 
 
 async def get_block(block_number: str, session: AsyncWeb3) -> dict:
