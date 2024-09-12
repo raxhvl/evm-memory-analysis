@@ -21,6 +21,13 @@ Install project dependencies
 pip install -r requirements.txt
 ```
 
+Copy the `.env` file from the provided example and add the RPC endpoint:
+
+```bash
+cp .env.example .env
+```
+
+
 ## Usage
 
 ### Command-Line Arguments
