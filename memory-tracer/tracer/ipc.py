@@ -19,7 +19,7 @@ async def call_ipc(method: str, params: list, session: AsyncWeb3) -> dict:
         Exception: If there is an error in the response.
     """
 
-    result = await session.provider.make_request(method, params)
+    result = await session.manager.coro_request(method, params)
 
     if "error" in result:
         raise Exception(f"IPC Error: {result['error']}")
