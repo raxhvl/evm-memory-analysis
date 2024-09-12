@@ -40,3 +40,10 @@ To run the script, use the following command:
 python tracer.py <start_block> <end_block>
 
 ```
+
+To view the script's resource consumption, use the following command:
+
+```bash
+./run.sh <start_block> <end_block>
+
+```
