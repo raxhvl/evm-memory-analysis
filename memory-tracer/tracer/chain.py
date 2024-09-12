@@ -1,9 +1,9 @@
 from typing import Dict, List
 
-from aiohttp import ClientSession
+from web3 import AsyncWeb3
 
 from tracer.config import EVM_WORD_SIZE
-from tracer.rpc import get_block, get_transaction_trace
+from tracer.ipc import get_block, get_transaction_trace
 
 
 class TransactionState:
@@ -20,7 +20,7 @@ transaction_state = TransactionState()
 
 
 async def get_transactions_from_block(
-    block_number: int, session: ClientSession
+    block_number: int, session: AsyncWeb3
 ) -> List[Dict[str, str]]:
 
     transactions: List[Dict[str, str]] = []
@@ -55,14 +55,14 @@ def is_memory_instruction(trace: Dict[str, str]) -> bool:
 
 
 async def get_call_frames_from_transaction(
-    transaction: Dict[str, str], session: ClientSession
+    transaction: Dict[str, str], session: AsyncWeb3
 ) -> List[Dict[str, str]]:
     """
     Get call frames from a transaction by fetching the trace data.
 
     Args:
         transaction (Dict[str, str]): The transaction details including 'id' and 'tx_hash'.
-        session (ClientSession): The aiohttp client session for making API requests.
+        session (AsyncWeb3): The IPC session for making API requests.
 
     Returns:
         List[Dict[str, str]]: A list of dictionaries containing call frame information.

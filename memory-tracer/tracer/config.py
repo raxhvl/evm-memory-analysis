@@ -12,5 +12,5 @@ DATA_DIR = "data"
 ASYNC_WORKERS_LIMIT = 1000
 
 
-# Retrieve the RPC endpoint from environment variables
-RPC_ENDPOINT = os.getenv("RPC_ENDPOINT")
+# Retrieve the IPC_PATH from environment variables
+IPC_PATH = os.getenv("IPC_PATH")
