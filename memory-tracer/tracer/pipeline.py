@@ -18,13 +18,14 @@ async def schedule_rpc_tasks(task, stage) -> None:
 
     The number of concurrent workers is defined by `ASYNC_WORKERS_LIMIT`.
     """
-    session = await create_session()
 
-    async def f(arg):
-        await task(arg, session)
+    async with create_session() as session:
 
-    await pl.task.each(
-        f=f,
-        stage=stage,
-        workers=ASYNC_WORKERS_LIMIT,
-    )
+        async def f(arg):
+            await task(arg, session)
+
+        await pl.task.each(
+            f=f,
+            stage=stage,
+            workers=ASYNC_WORKERS_LIMIT,
+        )

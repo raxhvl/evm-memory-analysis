@@ -54,7 +54,7 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
     return await call_ipc("debug_traceTransaction", [tx_hash, {"enableMemory": True}], session)
 
 
-async def create_session() -> AsyncWeb3:
+def create_session() -> AsyncWeb3:
     """
     Create and return an asynchronous Web3 session using IPC provider.
 
@@ -74,4 +74,4 @@ async def create_session() -> AsyncWeb3:
         raise ValueError("IPC_PATH not found in environment file")
 
     # Create an instance of `AsyncWeb3` using the IPC provider
-    return await AsyncWeb3(AsyncIPCProvider(IPC_PATH))
+    return AsyncWeb3(AsyncIPCProvider(IPC_PATH))
