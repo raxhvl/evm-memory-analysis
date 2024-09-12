@@ -14,4 +14,3 @@ ASYNC_WORKERS_LIMIT = 1000
 
 # Retrieve the RPC endpoint from environment variables
 RPC_ENDPOINT = os.getenv("RPC_ENDPOINT")
-API_KEY = os.getenv("RPC_API_KEY")
