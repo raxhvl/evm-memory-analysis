@@ -100,6 +100,7 @@ async def trace_memory(start_block: int, end_block: int) -> None:
             await save_call_frames(start_block, end_block, transaction_iterator)
     except Exception as e:
         logging.error(f"Error tracing memory for blocks {start_block}-{end_block}: {e}")
+        raise
 
 
 # Command-line arguments parsing
