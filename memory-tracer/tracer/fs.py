@@ -8,6 +8,10 @@ from typing import Dict, Iterator, List
 from tracer.config import DATA_DIR
 
 
+def get_output_dir(start_block, end_block):
+    return os.path.join(DATA_DIR, f"{start_block}_to_{end_block}")
+
+
 # Enum to define the type of files this handler can manage
 class FileType(Enum):
     TRANSACTION = "transactions"
@@ -27,7 +31,7 @@ class OutputHandler:
         self.start_block = start_block
         self.end_block = end_block
         self.file_type = file_type
-        self.directory = os.path.join(DATA_DIR, f"{self.start_block}_to_{self.end_block}")
+        self.directory = get_output_dir(start_block, end_block)
         self.file_name = os.path.join(self.directory, f"{self.file_type.value}.csv")
         self.compressed_file_name = f"{self.file_name}.gz"
 
