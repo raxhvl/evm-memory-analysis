@@ -4,4 +4,4 @@
 
 echo "Tracing EVM Memory..."
 
-/usr/bin/time --format "⏲️  Processing time: %E (in [hours:]minutes:seconds)\n💾 Memory usage: %MKB\n🧠 CPU usage: %P"  python tracer.py "$@"
+/usr/bin/time --format "⏲️  Processing time: %E ([hours:]minutes:seconds)\n💾 Memory usage: %MKB\n🧠 CPU usage: %P"  python tracer.py "$@"

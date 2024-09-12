@@ -45,8 +45,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
     # Schedule RPC tasks for each block in the range
     await schedule_rpc_tasks(task=task, stage=block_range)
 
-    # TODO: remove
-    output.compress(False)
+    output.compress()
 
     return output.compressed_file_name
 
@@ -79,8 +78,7 @@ async def save_call_frames(
     # Schedule RPC tasks for each transaction in the iterator
     await schedule_rpc_tasks(task=task, stage=transaction_iterator)
 
-    # TODO: remove
-    output.compress(False)
+    output.compress()
 
 
 async def trace_memory(start_block: int, end_block: int) -> None:
