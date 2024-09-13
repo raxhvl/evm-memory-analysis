@@ -34,7 +34,7 @@ async def get_transactions_from_block(
                 "block": str(block_number),
                 "tx_hash": tx.get("hash", ""),
                 "to": tx.get("to", ""),
-                "tx_gas": str(int(tx.get("gas", "0x0"), 0)),
+                "tx_gas": tx.get("gas", 0),
             }
         )
 
