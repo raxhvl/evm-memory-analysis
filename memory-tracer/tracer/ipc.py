@@ -1,5 +1,4 @@
 from web3 import AsyncIPCProvider, AsyncWeb3
-from web3.method import Method
 
 from tracer.config import IPC_PATH
 
@@ -16,7 +15,8 @@ async def get_block(block_number: str, session: AsyncWeb3) -> dict:
         dict: The block data.
     """
     try:
-        return await session.eth.getBlockByNumber(block_number, True)
+        await session.socket.send("eth_getBlockByNumber", [block_number, True])
+        return await session.socket.recv()
     except Exception as e:
         raise RuntimeError(f"IPC error (eth_getBlockByNumber): {e}") from e
 
@@ -34,12 +34,13 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
     """
 
     try:
-        return await session.eth.traceTransaction(tx_hash, {"enableMemory": True})
+        await session.socket.send("debug_traceTransaction", [tx_hash, {"enableMemory": True}])
+        return await session.socket.recv()
     except Exception as e:
         raise RuntimeError(f"IPC error (debug_traceTransaction): {e}") from e
 
 
-async def create_session() -> AsyncWeb3:
+def create_session() -> AsyncWeb3:
     """
     Create and return an asynchronous Web3 session using IPC provider.
 
@@ -58,13 +59,5 @@ async def create_session() -> AsyncWeb3:
     if not IPC_PATH:
         raise ValueError("IPC_PATH not found in environment file")
 
-    session = await AsyncWeb3(AsyncIPCProvider(IPC_PATH))
-    session.eth.attach_methods(
-        {
-            "getBlockByNumber": Method("eth_getBlockByNumber", is_property=False),
-            "traceTransaction": Method("debug_traceTransaction", is_property=False),
-        },
-    )
-
     # Create an instance of `AsyncWeb3` using the IPC provider
-    return session
+    return AsyncWeb3(AsyncIPCProvider(IPC_PATH))
