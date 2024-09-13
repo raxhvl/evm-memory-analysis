@@ -2,9 +2,12 @@ import argparse
 import asyncio
 import logging
 
+from web3 import AsyncWeb3
+
 from tracer.chain import get_call_frames_from_transaction, get_transactions_from_block
 from tracer.fs import CSVIterator, FileType, OutputHandler
-from tracer.pipeline import schedule_rpc_tasks
+from tracer.ipc import create_session
+from tracer.pipeline import schedule_task
 
 # Configure logging
 logging.basicConfig(
@@ -15,13 +18,14 @@ logging.basicConfig(
 )
 
 
-async def save_transactions(start_block: int, end_block: int) -> str:
+async def save_transactions(start_block: int, end_block: int, session: AsyncWeb3) -> str:
     """
     Save transactions for a range of blocks.
 
     Args:
         start_block (int): The starting block number.
         end_block (int): The ending block number.
+        session (AsyncWeb3): The IPC session to be used.
 
     Returns:
         str: The name of the compressed file containing transactions.
@@ -31,7 +35,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
     # Initialize the output handler for transactions
     output = OutputHandler(start_block, end_block, FileType.TRANSACTION)
 
-    async def task(block_number: int, session):
+    async def task(block_number: int):
         """
         Task to fetch transactions for a given block and write to output.
 
@@ -43,7 +47,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
         output.write(transactions)
 
     # Schedule RPC tasks for each block in the range
-    await schedule_rpc_tasks(task=task, stage=block_range)
+    await schedule_task(task=task, stage=block_range)
 
     output.compress()
 
@@ -51,7 +55,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
 
 
 async def save_call_frames(
-    start_block: int, end_block: int, transaction_iterator: CSVIterator
+    start_block: int, end_block: int, transaction_iterator: CSVIterator, session: AsyncWeb3
 ) -> None:
     """
     Save call frames for transactions within a range of blocks.
@@ -60,11 +64,12 @@ async def save_call_frames(
         start_block (int): The starting block number.
         end_block (int): The ending block number.
         transaction_iterator (CSVIterator): Iterator for transactions from the CSV file.
+        session (AsyncWeb3): The IPC session to be used.
     """
     # Initialize the output handler for call frames
     output = OutputHandler(start_block, end_block, FileType.CALL_FRAME)
 
-    async def task(transaction, session):
+    async def task(transaction):
         """
         Task to fetch call frames for a given transaction and write to output.
 
@@ -76,7 +81,7 @@ async def save_call_frames(
         output.write(call_frames)
 
     # Schedule RPC tasks for each transaction in the iterator
-    await schedule_rpc_tasks(task=task, stage=transaction_iterator)
+    await schedule_task(task=task, stage=transaction_iterator)
 
     output.compress()
 
@@ -90,12 +95,14 @@ async def trace_memory(start_block: int, end_block: int) -> None:
         end_block (int): The ending block number.
     """
     try:
-        # Save transactions to a compressed csv file and get its path.
-        tx_file = await save_transactions(start_block, end_block)
+        # Create a persistent IPC session to be used for the lifetime of the script.
+        async with create_session() as session:
+            # Save transactions to a compressed csv file and get its path.
+            tx_file = await save_transactions(start_block, end_block, session)
 
-        # Process the transactions to save call frames
-        with CSVIterator(tx_file) as transaction_iterator:
-            await save_call_frames(start_block, end_block, transaction_iterator)
+            # Process the transactions to save call frames
+            with CSVIterator(tx_file) as transaction_iterator:
+                await save_call_frames(start_block, end_block, transaction_iterator, session)
     except Exception as e:
         logging.error(f"Error tracing memory for blocks {start_block}-{end_block}: {e}")
         raise

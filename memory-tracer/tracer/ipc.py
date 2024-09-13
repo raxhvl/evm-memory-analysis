@@ -1,29 +1,7 @@
 from web3 import AsyncIPCProvider, AsyncWeb3
+from web3.method import Method
 
 from tracer.config import IPC_PATH
-
-
-async def call_ipc(method: str, params: list, session: AsyncWeb3) -> dict:
-    """
-    Call the Ethereum JSON-RPC via IPC.
-
-    Args:
-        method (str): The JSON-RPC method to call.
-        params (list): Parameters for the JSON-RPC method.
-        session (AsyncWeb3): The IPC session to use for the request.
-
-    Returns:
-        dict: The result of the IPC call.
-
-    Raises:
-        Exception: If there is an error in the response.
-    """
-
-    result = await session.manager.coro_request(method, params)
-
-    if "error" in result:
-        raise Exception(f"IPC Error: {result['error']}")
-    return result
 
 
 async def get_block(block_number: str, session: AsyncWeb3) -> dict:
@@ -37,7 +15,10 @@ async def get_block(block_number: str, session: AsyncWeb3) -> dict:
     Returns:
         dict: The block data.
     """
-    return await call_ipc("eth_getBlockByNumber", [block_number, True], session)
+    try:
+        return await session.eth.getBlockByNumber(block_number, True)
+    except Exception as e:
+        raise RuntimeError(f"IPC error (eth_getBlockByNumber): {e}") from e
 
 
 async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
@@ -51,7 +32,11 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
     Returns:
         dict: The trace result of the transaction.
     """
-    return await call_ipc("debug_traceTransaction", [tx_hash, {"enableMemory": True}], session)
+
+    try:
+        return await session.eth.traceTransaction(tx_hash, {"enableMemory": True})
+    except Exception as e:
+        raise RuntimeError(f"IPC error (debug_traceTransaction): {e}") from e
 
 
 def create_session() -> AsyncWeb3:
@@ -73,5 +58,13 @@ def create_session() -> AsyncWeb3:
     if not IPC_PATH:
         raise ValueError("IPC_PATH not found in environment file")
 
+    session = AsyncWeb3(AsyncIPCProvider(IPC_PATH))
+    session.eth.attach_methods(
+        {
+            "getBlockByNumber": Method("eth_getBlockByNumber", is_property=False),
+            "traceTransaction": Method("debug_traceTransaction", is_property=False),
+        },
+    )
+
     # Create an instance of `AsyncWeb3` using the IPC provider
-    return AsyncWeb3(AsyncIPCProvider(IPC_PATH))
+    return session
