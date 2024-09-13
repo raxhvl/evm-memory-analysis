@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-from web3 import AsyncWeb3
+from web3 import Web3
 
 from tracer.config import EVM_WORD_SIZE
 from tracer.ipc import get_block, get_transaction_trace
@@ -19,20 +19,18 @@ class TransactionState:
 transaction_state = TransactionState()
 
 
-async def get_transactions_from_block(
-    block_number: int, session: AsyncWeb3
-) -> List[Dict[str, str]]:
+def get_transactions_from_block(block_number: int, session: Web3) -> List[Dict[str, str]]:
 
     transactions: List[Dict[str, str]] = []
 
-    block = await get_block(hex(block_number), session)
+    block = get_block(hex(block_number), session)
     for tx in block.get("transactions", []):
         tx_id = transaction_state.get_next_id()
         transactions.append(
             {
                 "id": str(tx_id),
                 "block": str(block_number),
-                "tx_hash": tx.get("hash", ""),
+                "tx_hash": tx.get("hash", "").to_0x_hex(),
                 "to": tx.get("to", ""),
                 "tx_gas": tx.get("gas", 0),
             }
@@ -54,8 +52,8 @@ def is_memory_instruction(trace: Dict[str, str]) -> bool:
     return trace["op"] in ["MSTORE8", "MSTORE", "MLOAD"]
 
 
-async def get_call_frames_from_transaction(
-    transaction: Dict[str, str], session: AsyncWeb3
+def get_call_frames_from_transaction(
+    transaction: Dict[str, str], session: Web3
 ) -> List[Dict[str, str]]:
     """
     Get call frames from a transaction by fetching the trace data.
@@ -74,7 +72,7 @@ async def get_call_frames_from_transaction(
         raise ValueError("Transaction must contain 'tx_hash' and 'id'.")
 
     call_frames: List[Dict[str, str]] = []
-    trace_data = await get_transaction_trace(transaction["tx_hash"], session)
+    trace_data = get_transaction_trace(transaction["tx_hash"], session)
 
     struct_logs = trace_data["structLogs"]
     for index, trace in enumerate(struct_logs):
