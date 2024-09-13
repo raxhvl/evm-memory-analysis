@@ -1,6 +1,6 @@
 from aiohttp import ClientSession
 
-from tracer.config import API_KEY, RPC_ENDPOINT
+from tracer.config import RPC_ENDPOINT
 
 
 async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
@@ -22,9 +22,6 @@ async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
     if not RPC_ENDPOINT:
         raise ValueError("RPC_ENDPOINT not found in environment file")
 
-    if not API_KEY:
-        raise ValueError("API_KEY not found in environment file")
-
     payload = {
         "jsonrpc": "2.0",
         "method": method,
@@ -34,7 +31,6 @@ async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
 
     async with session.post(
         RPC_ENDPOINT,
-        headers={"x-api-key": API_KEY},
         json=payload,
     ) as response:
         result = await response.json()
