@@ -39,7 +39,7 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
         raise RuntimeError(f"IPC error (debug_traceTransaction): {e}") from e
 
 
-def create_session() -> AsyncWeb3:
+async def create_session() -> AsyncWeb3:
     """
     Create and return an asynchronous Web3 session using IPC provider.
 
@@ -58,7 +58,7 @@ def create_session() -> AsyncWeb3:
     if not IPC_PATH:
         raise ValueError("IPC_PATH not found in environment file")
 
-    session = AsyncWeb3(AsyncIPCProvider(IPC_PATH))
+    session = await AsyncWeb3(AsyncIPCProvider(IPC_PATH))
     session.eth.attach_methods(
         {
             "getBlockByNumber": Method("eth_getBlockByNumber", is_property=False),
