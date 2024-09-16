@@ -3,7 +3,7 @@ from web3 import AsyncIPCProvider, AsyncWeb3
 from tracer.config import IPC_PATH
 
 
-async def get_block(block_number: str, session: AsyncWeb3) -> dict:
+async def get_block(block_number: str, session: AsyncWeb3):
     """
     Retrieve a block by its number.
 
@@ -15,13 +15,12 @@ async def get_block(block_number: str, session: AsyncWeb3) -> dict:
         dict: The block data.
     """
     try:
-        await session.socket.send("eth_getBlockByNumber", [block_number, True])
-        return await session.socket.recv()
+        return await session.provider.make_request("eth_getBlockByNumber", [block_number, True])
     except Exception as e:
-        raise RuntimeError(f"IPC error (eth_getBlockByNumber): {e}") from e
+        raise RuntimeError(f"IPC error (eth_getBlockByNumber[{block_number}]): {e}") from e
 
 
-async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
+async def get_transaction_trace(tx_hash: str, session: AsyncWeb3):
     """
     Trace a transaction by its hash.
 
@@ -34,10 +33,11 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3) -> dict:
     """
 
     try:
-        await session.socket.send("debug_traceTransaction", [tx_hash, {"enableMemory": True}])
-        return await session.socket.recv()
+        return session.provider.make_request(
+            "debug_traceTransaction", [tx_hash, {"enableMemory": True}]
+        )
     except Exception as e:
-        raise RuntimeError(f"IPC error (debug_traceTransaction): {e}") from e
+        raise RuntimeError(f"IPC error (debug_traceTransaction[{tx_hash}]): {e}") from e
 
 
 def create_session() -> AsyncWeb3:
