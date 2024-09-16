@@ -14,10 +14,10 @@ async def get_block(block_number: str, session: AsyncWeb3):
     Returns:
         dict: The block data.
     """
-    try:
-        return await session.provider.make_request("eth_getBlockByNumber", [block_number, True])
-    except Exception as e:
-        raise RuntimeError(f"IPC error (eth_getBlockByNumber[{block_number}]): {e}") from e
+    result = await session.provider.make_request("eth_getBlockByNumber", [block_number, True])
+    if "error" in result:
+        raise Exception(f"IPC error (eth_getBlockByNumber[{block_number}]): {result['error']}")
+    return result.get("result")
 
 
 async def get_transaction_trace(tx_hash: str, session: AsyncWeb3):
@@ -32,12 +32,12 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3):
         dict: The trace result of the transaction.
     """
 
-    try:
-        return session.provider.make_request(
-            "debug_traceTransaction", [tx_hash, {"enableMemory": True}]
-        )
-    except Exception as e:
-        raise RuntimeError(f"IPC error (debug_traceTransaction[{tx_hash}]): {e}") from e
+    result = await session.provider.make_request(
+        "debug_traceTransaction", [tx_hash, {"enableMemory": True}]
+    )
+    if "error" in result:
+        raise Exception(f"IPC error (debug_traceTransaction[{tx_hash}]): {result['error']}")
+    return result.get("result")
 
 
 def create_session() -> AsyncWeb3:
