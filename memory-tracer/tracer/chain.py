@@ -80,7 +80,7 @@ async def get_call_frames_from_transaction(
         return call_frames
 
     struct_logs = trace_data["data"]
-    max_index = len(trace_data) - 1
+    max_index = len(struct_logs) - 1
     for index, trace in enumerate(struct_logs):
         next_index = min(index + 1, max_index)
         next_trace = struct_logs[next_index]
