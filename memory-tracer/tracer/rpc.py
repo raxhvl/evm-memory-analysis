@@ -81,18 +81,19 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
             let instructions = this.memoryInstructions
             if (Object.keys(instructions).includes(op)) {
             this.data.push({
-                op: instructions[op] ,
+                op: instructions[op],
                 depth: log.getDepth(),
                 offset: log.stack.peek(0),
                 gasCost: log.getCost(),
-                memorySize: log.memory.length(),
+                memorySize: log.memory.length()
             });
             }
         },
         result: function (ctx, _) {
+            let error = !!ctx.error
             return {
-                error: !!ctx.error,
-                data: this.data
+                error,
+                data: error ? [] : this.data
             };
         }
     }
