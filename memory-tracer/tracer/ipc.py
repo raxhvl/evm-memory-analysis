@@ -31,9 +31,42 @@ async def get_transaction_trace(tx_hash: str, session: AsyncWeb3):
     Returns:
         dict: The trace result of the transaction.
     """
+    # Custom tracer
+    # Learn more: https://geth.ethereum.org/docs/developers/evm-tracing/custom-tracer
+    # Memory instruction is mapped to single characters to reduce response size.
+    # `MSTORE`  =  "W" (for "write [w]ord")
+    # `MSTORE8` =  "B" (for "write [b]yte")
+    # `MLOAD`   =  "R" (for "[r]ead")
 
+    tracer = """
+    {
+        data: [],
+        memoryInstructions: {"MSTORE":"W", "MSTORE8":"B", "MLOAD":"R"},
+        fault: function (log) {},
+        step: function (log) {
+            let op = log.op.toString();
+            let instructions = this.memoryInstructions
+            if (Object.keys(instructions).includes(op)) {
+            this.data.push({
+                op: instructions[op],
+                depth: log.getDepth(),
+                offset: log.stack.peek(0),
+                gasCost: log.getCost(),
+                memorySize: log.memory.length()
+            });
+            }
+        },
+        result: function (ctx, _) {
+            let error = !!ctx.error
+            return {
+                error,
+                data: error ? [] : this.data
+            };
+        }
+    }
+    """
     result = await session.provider.make_request(
-        "debug_traceTransaction", [tx_hash, {"enableMemory": True}]
+        "debug_traceTransaction", [tx_hash, {"tracer": tracer}]
     )
     if "error" in result:
         raise Exception(f"IPC error (debug_traceTransaction[{tx_hash}]): {result['error']}")
