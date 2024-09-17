@@ -76,30 +76,29 @@ async def get_call_frames_from_transaction(
     call_frames: List[Dict[str, str]] = []
     trace_data = await get_transaction_trace(transaction["tx_hash"], session)
 
-    struct_logs = trace_data["structLogs"]
+    if trace_data["error"]:
+        return call_frames
+
+    struct_logs = trace_data["data"]
+    max_index = len(trace_data) - 1
     for index, trace in enumerate(struct_logs):
-        if is_memory_instruction(trace):
-            next_trace = struct_logs[index + 1]
-            pre_memory = len(trace["memory"]) * EVM_WORD_SIZE
-            post_memory = len(next_trace["memory"]) * EVM_WORD_SIZE
-            expansion = post_memory - pre_memory
-            memory_offset = int(trace["stack"][-1], 0) if trace["stack"] else 0
+        next_index = min(index + 1, max_index)
+        next_trace = struct_logs[next_index]
+        pre_memory = trace["memorySize"] * EVM_WORD_SIZE
+        post_memory = next_trace["memorySize"] * EVM_WORD_SIZE
+        expansion = post_memory - pre_memory
+        memory_offset = trace["offset"]
 
-            # Map the instruction or use the original op if not in the mapping
-            memory_instruction = {"MSTORE8": "B", "MSTORE": "W", "MLOAD": "R"}.get(
-                trace["op"], trace["op"]
-            )
-
-            row = {
-                "transaction_id": transaction["id"],
-                "call_depth": trace["depth"],
-                "memory_instruction": memory_instruction,
-                "memory_access_offset": memory_offset,
-                "memory_gas_cost": trace["gasCost"],
-                "pre_active_memory_size": pre_memory,
-                "post_active_memory_size": post_memory,
-                "memory_expansion": expansion,
-            }
-            call_frames.append(row)
+        row = {
+            "transaction_id": transaction["id"],
+            "call_depth": trace["depth"],
+            "memory_instruction": trace["op"],
+            "memory_access_offset": memory_offset,
+            "memory_gas_cost": trace["gasCost"],
+            "pre_active_memory_size": pre_memory,
+            "post_active_memory_size": post_memory,
+            "memory_expansion": expansion,
+        }
+        call_frames.append(row)
 
     return call_frames

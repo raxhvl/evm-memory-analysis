@@ -64,4 +64,37 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
     Returns:
         dict: The trace result of the transaction.
     """
-    return await call_rpc("debug_traceTransaction", [tx_hash, {"enableMemory": True}], session)
+    # Custom tracer
+    # Learn more: https://geth.ethereum.org/docs/developers/evm-tracing/custom-tracer
+    # Memory instruction is mapped to single characters to reduce response size.
+    # `MSTORE`  =  "W" (for "write [w]ord")
+    # `MSTORE8` =  "B" (for "write [b]yte")
+    # `MLOAD`   =  "R" (for "[r]ead")
+
+    tracer = """
+    {
+        data: [],
+        memoryInstructions: {"MSTORE":"W", "MSTORE8":"B", "MLOAD":"R"},
+        fault: function (log) {},
+        step: function (log) {
+            let op = log.op.toString();
+            let instructions = this.memoryInstructions
+            if (Object.keys(instructions).includes(op)) {
+            this.data.push({
+                op: instructions[op] ,
+                depth: log.getDepth(),
+                offset: log.stack.peek(0),
+                gasCost: log.getCost(),
+                memorySize: log.memory.length(),
+            });
+            }
+        },
+        result: function (ctx, _) {
+            return {
+                error: !!ctx.error,
+                data: this.data
+            };
+        }
+    }
+    """
+    return await call_rpc("debug_traceTransaction", [tx_hash, {"tracer": tracer}], session)
