@@ -35,7 +35,7 @@ async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
     ) as response:
         result = await response.json()
         if "error" in result:
-            raise Exception(f"RPC Error: {result['error']}")
+            raise Exception(f"RPC Error ({method}>req:{params}): {result['error']}")
         return result.get("result")
 
 

@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 
 from tracer.chain import get_call_frames_from_transaction, get_transactions_from_block
 from tracer.fs import CSVIterator, FileType, OutputHandler
@@ -13,6 +14,31 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     filemode="a",  # Append mode
 )
+
+total_transactions = 0
+current_transaction = 0
+
+
+def print_progress_bar(iteration, total, prefix="", length=40, fill="█", print_end="\r"):
+    """
+    Print a progress bar to the console.
+
+    Args:
+        iteration (int): Current iteration.
+        total (int): Total number of iterations.
+        prefix (str): Prefix string.
+        length (int): Character length of the progress bar.
+        fill (str): Character to fill the progress bar.
+        print_end (str): End character for the progress bar line.
+    """
+    percent = ("{0:.1f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + "-" * (length - filled_length)
+    sys.stdout.write(f"\r{prefix} |{bar}| {percent}% Complete [{iteration}/{total}]")
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write(print_end)
+        sys.stdout.flush()
 
 
 async def save_transactions(start_block: int, end_block: int) -> str:
@@ -32,6 +58,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
     output = OutputHandler(start_block, end_block, FileType.TRANSACTION)
 
     async def task(block_number: int, session):
+        global total_transactions
         """
         Task to fetch transactions for a given block and write to output.
 
@@ -40,6 +67,7 @@ async def save_transactions(start_block: int, end_block: int) -> str:
             session: The session object for RPC calls.
         """
         transactions = await get_transactions_from_block(block_number, session)
+        total_transactions += len(transactions)
         output.write(transactions)
 
     # Schedule RPC tasks for each block in the range
@@ -65,6 +93,7 @@ async def save_call_frames(
     output = OutputHandler(start_block, end_block, FileType.CALL_FRAME)
 
     async def task(transaction, session):
+        global current_transaction
         """
         Task to fetch call frames for a given transaction and write to output.
 
@@ -73,6 +102,11 @@ async def save_call_frames(
             session: The session object for RPC calls.
         """
         call_frames = await get_call_frames_from_transaction(transaction, session)
+        current_transaction += 1
+        print_progress_bar(
+            current_transaction, total_transactions, prefix="Processing transactions"
+        )
+
         output.write(call_frames)
 
     # Schedule RPC tasks for each transaction in the iterator
