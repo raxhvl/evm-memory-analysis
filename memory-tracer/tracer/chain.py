@@ -73,6 +73,9 @@ def process_trace(instructions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             match instruction["op"]:
                 # RETURN
                 case "U":
+                    # Usually RETURN would not expand memory since the point is to
+                    # return data from memory. But it CAN return memory, which
+                    # is an edge case probably to be explored later.
                     if instruction["gas_cost"] > 0:
                         raise ValueError("RETURN has expanded memory. TODO: Handle this!")
                     else:
@@ -111,6 +114,7 @@ async def get_call_frames_from_transaction(
     call_frames: List[Dict[str, str]] = []
     trace_data = await get_transaction_trace(transaction["tx_hash"], session)
 
+    # Ignore failed transactions
     if trace_data["error"]:
         return call_frames
 
@@ -123,14 +127,11 @@ async def get_call_frames_from_transaction(
         if instruction["op"] == "I":
             continue
 
-        # TODO: Validate that all required instructions has an offset.
-        memory_offset = instruction["offset"]
-
         row = {
             "transaction_id": transaction["id"],
             "call_depth": instruction["depth"],
             "memory_instruction": instruction["op"],
-            "memory_access_offset": memory_offset,
+            "memory_access_offset": instruction["offset"],
             "memory_gas_cost": instruction["gas_cost"],
             "pre_active_memory_size": instruction["memory_size"],
             "post_active_memory_size": instruction["post_memory_size"],
