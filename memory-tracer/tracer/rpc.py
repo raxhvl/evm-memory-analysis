@@ -81,10 +81,14 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
 
             if (Object.keys(requiredInstructions).includes(op)) {{
                 op_shorthand = requiredInstructions[op];
+                offset = op_shorthand == "I" ? 0 :
+                         op_shorthand == "X" ? log.stack.peek(1) :
+                         log.stack.peek(0)
+
                 this.data.push({{
                     op: op_shorthand,
                     depth: log.getDepth(),
-                    offset: op_shorthand == "I" ? 0 : log.stack.peek(0),
+                    offset,
                     gas_cost: log.getCost(),
                     memory_size: log.memory.length()
                 }});
