@@ -1,6 +1,8 @@
+import json
+
 from aiohttp import ClientSession
 
-from tracer.config import API_KEY, RPC_ENDPOINT
+from tracer.config import API_KEY, INSTRUCTIONS, RPC_ENDPOINT
 
 
 async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
@@ -66,63 +68,35 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
     # Custom tracer
     # Learn more: https://geth.ethereum.org/docs/developers/evm-tracing/custom-tracer
     # Memory instruction is mapped to single characters to reduce response size.
-    # `MLOAD`   =  "R" (for "[R]ead")
-    # `MSTORE`  =  "W" (for "write [W]ord")
-    # `MSTORE8` =  "B" (for "write [B]yte")
-    #
-    #  xxCOPY instructions:
-    # `CALLDATACOPY`    = "L" (for "copy cal[L]data")
-    # `CODECOPY`        = "D" (for "copy co[D]e")
-    # `EXTCODECOPY`     = "X" (for "copy e[X]ternal code")
-    # `RETURNDATACOPY`  = "N" (for "copy retur[N] data")
-    # `MCOPY`           = "M" (for "copy [M]emory")
-    #
-    # Besides these, `STOP` and `RETURN` opcodes are also requested to capture
-    # call frame boundaries:
-    #
-    # `RETURN` = "U"  (for "Ret[U]rn")
-    # `STOP`   = "O"  (for "St[O]p")
-    #
-    #  ****
     # `Revert` transactions are ignored.
 
-    tracer = """
-    {
+    tracer = f"""
+    {{
         data: [],
-        requiredInstructions: {
-            "MLOAD":"R",
-            "MSTORE":"W",
-            "MSTORE8":"B",
-            "CALLDATACOPY":"L",
-            "CODECOPY":"D",
-            "EXTCODECOPY":"X",
-            "RETURNDATACOPY":"N",
-            "MCOPY": "M",
-            "RETURN": "U",
-            "STOP": "U"
-        },
-        fault: function (log) {},
-        step: function (log) {
+        requiredInstructions: {json.dumps(INSTRUCTIONS)},
+        fault: function (log) {{}},
+        step: function (log) {{
             let op = log.op.toString();
             let requiredInstructions = this.requiredInstructions;
 
-            if (Object.keys(requiredInstructions).includes(op)) {
-                this.data.push({
-                    op: requiredInstructions[op],
+            if (Object.keys(requiredInstructions).includes(op)) {{
+                op_shorthand = requiredInstructions[op];
+                this.data.push({{
+                    op: op_shorthand,
                     depth: log.getDepth(),
-                    offset: log.stack.peek(0),
-                    gasCost: log.getCost(),
-                    memorySize: log.memory.length()
-                });
-            }
-        },
-        result: function (ctx, _) {
+                    offset: op_shorthand == "I" ? 0 : log.stack.peek(0),
+                    gas_cost: log.getCost(),
+                    memory_size: log.memory.length()
+                }});
+            }}
+        }},
+        result: function (ctx, _) {{
             let error = !!ctx.error
-            return {
+            return {{
                 error,
                 data: error ? [] : this.data
-            };
-        }
-    }
+            }};
+        }}
+    }}
     """
     return await call_rpc("debug_traceTransaction", [tx_hash, {"tracer": tracer}], session)

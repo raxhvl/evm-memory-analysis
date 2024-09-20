@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from aiohttp import ClientSession
 
@@ -40,17 +40,53 @@ async def get_transactions_from_block(
     return transactions
 
 
-def is_memory_instruction(trace: Dict[str, str]) -> bool:
+def process_trace(instructions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Check if the trace operation is a memory instruction.
+    Process instructions to calculate memory expansion based on the next instruction
+    in the call frame, handling inert instructions and return operations.
 
     Args:
-        trace (Dict[str, str]): The trace dictionary containing operation details.
+        instructions (List[Dict[str, Any]]): The list of instruction data.
 
     Returns:
-        bool: True if the operation is a memory instruction, False otherwise.
+        List[Dict[str, Any]]: The processed instructions with
+        'post_memory_size' and 'memory_expansion'.
     """
-    return trace["op"] in ["MSTORE8", "MSTORE", "MLOAD"]
+
+    # Get the next instruction in the call frame
+    maxIndex = len(instructions) - 1
+    for index, instruction in enumerate(instructions):
+        next_index = min(index + 1, maxIndex)
+        next_instruction = instructions[next_index]
+
+        # Instructions are within the call boundary
+        if next_instruction["depth"] == instruction["depth"]:
+            instructions[index]["post_memory_size"] = next_instruction["memory_size"]
+            instructions[index]["memory_expansion"] = (
+                next_instruction["memory_size"] - instruction["memory_size"]
+            )
+
+        # These instructions change the call depth because they are at the
+        # boundary of the call frame. Memory expansion behavior for each
+        # instruction MUST be handled explicitly.
+        else:
+            match instruction["op"]:
+                # RETURN
+                case "U":
+                    if instruction["gas_cost"] > 0:
+                        raise ValueError("RETURN has expanded memory. TODO: Handle this!")
+                    else:
+                        instructions[index]["post_memory_size"] = instruction["memory_size"]
+                        instructions[index]["memory_expansion"] = 0
+
+                # An inert instruction does not expand memory but is required to ensure the
+                # call frame has a boundary.
+                case "I":
+                    instructions[index]["post_memory_size"] = instruction["memory_size"]
+                    instructions[index]["memory_expansion"] = 0
+                case _:
+                    raise RuntimeError(f"Call boundary not handled for {instruction['op']}")
+    return instructions
 
 
 async def get_call_frames_from_transaction(
@@ -78,25 +114,27 @@ async def get_call_frames_from_transaction(
     if trace_data["error"]:
         return call_frames
 
-    struct_logs = trace_data["data"]
-    max_index = len(struct_logs) - 1
-    for index, trace in enumerate(struct_logs):
-        next_index = min(index + 1, max_index)
-        next_trace = struct_logs[next_index]
-        pre_memory = trace["memorySize"]
-        post_memory = next_trace["memorySize"]
-        expansion = post_memory - pre_memory
-        memory_offset = trace["offset"]
+    instructions = process_trace(trace_data["data"])
+
+    for instruction in instructions:
+
+        # Inert instructions can be excluded from output
+        # since they don't expand the memory.
+        if instruction["op"] == "I":
+            continue
+
+        # TODO: Validate that all required instructions has an offset.
+        memory_offset = instruction["offset"]
 
         row = {
             "transaction_id": transaction["id"],
-            "call_depth": trace["depth"],
-            "memory_instruction": trace["op"],
+            "call_depth": instruction["depth"],
+            "memory_instruction": instruction["op"],
             "memory_access_offset": memory_offset,
-            "memory_gas_cost": trace["gasCost"],
-            "pre_active_memory_size": pre_memory,
-            "post_active_memory_size": post_memory,
-            "memory_expansion": expansion,
+            "memory_gas_cost": instruction["gas_cost"],
+            "pre_active_memory_size": instruction["memory_size"],
+            "post_active_memory_size": instruction["post_memory_size"],
+            "memory_expansion": instruction["memory_expansion"],
         }
         call_frames.append(row)
 
