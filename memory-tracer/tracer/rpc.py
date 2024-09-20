@@ -66,26 +66,54 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
     # Custom tracer
     # Learn more: https://geth.ethereum.org/docs/developers/evm-tracing/custom-tracer
     # Memory instruction is mapped to single characters to reduce response size.
-    # `MSTORE`  =  "W" (for "write [w]ord")
-    # `MSTORE8` =  "B" (for "write [b]yte")
-    # `MLOAD`   =  "R" (for "[r]ead")
+    # `MLOAD`   =  "R" (for "[R]ead")
+    # `MSTORE`  =  "W" (for "write [W]ord")
+    # `MSTORE8` =  "B" (for "write [B]yte")
+    #
+    #  xxCOPY instructions:
+    # `CALLDATACOPY`    = "L" (for "copy cal[L]data")
+    # `CODECOPY`        = "D" (for "copy co[D]e")
+    # `EXTCODECOPY`     = "X" (for "copy e[X]ternal code")
+    # `RETURNDATACOPY`  = "N" (for "copy retur[N] data")
+    # `MCOPY`           = "M" (for "copy [M]emory")
+    #
+    # Besides these, `STOP` and `RETURN` opcodes are also requested to capture
+    # call frame boundaries:
+    #
+    # `RETURN` = "U"  (for "Ret[U]rn")
+    # `STOP`   = "O"  (for "St[O]p")
+    #
+    #  ****
+    # `Revert` transactions are ignored.
 
     tracer = """
     {
         data: [],
-        memoryInstructions: {"MSTORE":"W", "MSTORE8":"B", "MLOAD":"R"},
+        requiredInstructions: {
+            "MLOAD":"R",
+            "MSTORE":"W",
+            "MSTORE8":"B",
+            "CALLDATACOPY":"L",
+            "CODECOPY":"D",
+            "EXTCODECOPY":"X",
+            "RETURNDATACOPY":"N",
+            "MCOPY": "M",
+            "RETURN": "U",
+            "STOP": "U"
+        },
         fault: function (log) {},
         step: function (log) {
             let op = log.op.toString();
-            let instructions = this.memoryInstructions
-            if (Object.keys(instructions).includes(op)) {
-            this.data.push({
-                op: instructions[op],
-                depth: log.getDepth(),
-                offset: log.stack.peek(0),
-                gasCost: log.getCost(),
-                memorySize: log.memory.length()
-            });
+            let requiredInstructions = this.requiredInstructions;
+
+            if (Object.keys(requiredInstructions).includes(op)) {
+                this.data.push({
+                    op: requiredInstructions[op],
+                    depth: log.getDepth(),
+                    offset: log.stack.peek(0),
+                    gasCost: log.getCost(),
+                    memorySize: log.memory.length()
+                });
             }
         },
         result: function (ctx, _) {

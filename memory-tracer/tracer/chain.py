@@ -2,7 +2,6 @@ from typing import Dict, List
 
 from aiohttp import ClientSession
 
-from tracer.config import EVM_WORD_SIZE
 from tracer.rpc import get_block, get_transaction_trace
 
 
@@ -84,8 +83,8 @@ async def get_call_frames_from_transaction(
     for index, trace in enumerate(struct_logs):
         next_index = min(index + 1, max_index)
         next_trace = struct_logs[next_index]
-        pre_memory = trace["memorySize"] * EVM_WORD_SIZE
-        post_memory = next_trace["memorySize"] * EVM_WORD_SIZE
+        pre_memory = trace["memorySize"]
+        post_memory = next_trace["memorySize"]
         expansion = post_memory - pre_memory
         memory_offset = trace["offset"]
 
