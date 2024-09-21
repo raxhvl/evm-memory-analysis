@@ -2,7 +2,7 @@ import json
 
 from aiohttp import ClientSession
 
-from tracer.config import API_KEY, INSTRUCTIONS, RPC_ENDPOINT
+from tracer.config import API_KEY, INSTRUCTIONS, MEMORY_ACCESS_SIZE, RPC_ENDPOINT
 
 
 async def call_rpc(method: str, params: list, session: ClientSession) -> dict:
@@ -67,30 +67,43 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
     """
     # Custom tracer
     # Learn more: https://geth.ethereum.org/docs/developers/evm-tracing/custom-tracer
-    # Memory instruction is mapped to single characters to reduce response size.
-    # `Revert` transactions are ignored.
+    # Failed transactions are ignored.
 
     tracer = f"""
     {{
         data: [],
-        requiredInstructions: {json.dumps(INSTRUCTIONS)},
+        required_instructions: {json.dumps(INSTRUCTIONS)},
         fault: function (log) {{}},
         step: function (log) {{
-            let op = log.op.toString();
-            let requiredInstructions = this.requiredInstructions;
+            let name = log.op.toString();
 
-            if (Object.keys(requiredInstructions).includes(op)) {{
-                op_shorthand = requiredInstructions[op];
-                offset = op_shorthand == "I" ? 0 :
-                         op_shorthand == "X" ? log.stack.peek(1) :
-                         log.stack.peek(0)
+            if (Object.keys(this.required_instructions).includes(name)) {{
+
+                const instruction = this.required_instructions[name];
+
+                post_memory_size =  pre_memory_size =  log.memory.length();
+                is_fixed_size = instruction.access_type == "{MEMORY_ACCESS_SIZE.FIXED.value}"
+                offsets = []
+
+                for(input in instruction.stack_input_positions){{
+                    offset = log.stack.peek(input.offset);
+                    size = is_fixed_size ? instruction.size :
+                           log.stack.peek(input.size);
+
+                    post_memory_size = Math.max(post_memory_size, offset + size);
+                    offsets.push(offset);
+                }}
+
+                memory_expansion = post_memory_size - pre_memory_size;
 
                 this.data.push({{
-                    op: op_shorthand,
+                    op: instruction.opcode,
                     depth: log.getDepth(),
-                    offset,
+                    offsets,
                     gas_cost: log.getCost(),
-                    memory_size: log.memory.length()
+                    pre_memory_size,
+                    post_memory_size,
+                    memory_expansion
                 }});
             }}
         }},
