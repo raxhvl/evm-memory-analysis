@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from aiohttp import ClientSession
 
@@ -40,58 +40,6 @@ async def get_transactions_from_block(
     return transactions
 
 
-def process_trace(instructions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Process instructions to calculate memory expansion based on the next instruction
-    in the call frame, handling inert instructions and return operations.
-
-    Args:
-        instructions (List[Dict[str, Any]]): The list of instruction data.
-
-    Returns:
-        List[Dict[str, Any]]: The processed instructions with
-        'post_memory_size' and 'memory_expansion'.
-    """
-
-    # Get the next instruction in the call frame
-    maxIndex = len(instructions) - 1
-    for index, instruction in enumerate(instructions):
-        next_index = min(index + 1, maxIndex)
-        next_instruction = instructions[next_index]
-
-        # Instructions are within the call boundary
-        if next_instruction["depth"] == instruction["depth"]:
-            instructions[index]["post_memory_size"] = next_instruction["memory_size"]
-            instructions[index]["memory_expansion"] = (
-                next_instruction["memory_size"] - instruction["memory_size"]
-            )
-
-        # These instructions change the call depth because they are at the
-        # boundary of the call frame. Memory expansion behavior for each
-        # instruction MUST be handled explicitly.
-        else:
-            match instruction["op"]:
-                # RETURN
-                case "U":
-                    # Usually RETURN would not expand memory since the point is to
-                    # return data from memory. But it CAN return memory, which
-                    # is an edge case probably to be explored later.
-                    if instruction["gas_cost"] > 0:
-                        raise ValueError("RETURN has expanded memory. TODO: Handle this!")
-                    else:
-                        instructions[index]["post_memory_size"] = instruction["memory_size"]
-                        instructions[index]["memory_expansion"] = 0
-
-                # An inert instruction does not expand memory but is required to ensure the
-                # call frame has a boundary.
-                case "I":
-                    instructions[index]["post_memory_size"] = instruction["memory_size"]
-                    instructions[index]["memory_expansion"] = 0
-                case _:
-                    raise RuntimeError(f"Call boundary not handled for {instruction['op']}")
-    return instructions
-
-
 async def get_call_frames_from_transaction(
     transaction: Dict[str, str], session: ClientSession
 ) -> List[Dict[str, str]]:
@@ -118,25 +66,24 @@ async def get_call_frames_from_transaction(
     if trace_data["error"]:
         return call_frames
 
-    instructions = process_trace(trace_data["data"])
+    for instruction in trace_data["data"]:
 
-    for instruction in instructions:
+        # Some instructions access multiple memory locations
+        # because they can read and then back write to memory
+        # such as `MCOPY`, `CALL` etc. So offsets here is an array
+        # which gets flattened for each instruction in the output.
+        for offset in list(set(instruction["offsets"])):
 
-        # Inert instructions can be excluded from output
-        # since they don't expand the memory.
-        if instruction["op"] == "I":
-            continue
-
-        row = {
-            "transaction_id": transaction["id"],
-            "call_depth": instruction["depth"],
-            "memory_instruction": instruction["op"],
-            "memory_access_offset": instruction["offset"],
-            "memory_gas_cost": instruction["gas_cost"],
-            "pre_active_memory_size": instruction["memory_size"],
-            "post_active_memory_size": instruction["post_memory_size"],
-            "memory_expansion": instruction["memory_expansion"],
-        }
-        call_frames.append(row)
+            row = {
+                "transaction_id": transaction["id"],
+                "call_depth": instruction["depth"],
+                "memory_instruction": instruction["op"],
+                "memory_access_offset": offset,
+                "memory_gas_cost": instruction["gas_cost"],
+                "pre_active_memory_size": instruction["pre_memory_size"],
+                "post_active_memory_size": instruction["post_memory_size"],
+                "memory_expansion": instruction["memory_expansion"],
+            }
+            call_frames.append(row)
 
     return call_frames
