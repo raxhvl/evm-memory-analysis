@@ -1,5 +1,18 @@
 {
-  "cSpell.words": ["aiohttp", "pypeln", "venv"],
+  "cSpell.words": [
+    "aiohttp",
+    "CALLCODE",
+    "CALLDATACOPY",
+    "CODECOPY",
+    "EXTCODECOPY",
+    "MCOPY",
+    "MLOAD",
+    "MSTORE",
+    "pypeln",
+    "RETURNDATACOPY",
+    "STATICCALL",
+    "venv"
+  ],
   "[python]": {
     "editor.rulers": [100],
     "editor.formatOnSave": true,
