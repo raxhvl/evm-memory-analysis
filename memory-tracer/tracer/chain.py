@@ -68,17 +68,18 @@ async def get_call_frames_from_transaction(
 
     for instruction in trace_data["data"]:
 
-        # Some instructions access multiple memory locations
-        # because they can read and then back write to memory
-        # such as `MCOPY`, `CALL` etc. So offsets here is an array
-        # which gets flattened for each instruction in the output.
-        for offset in list(set(instruction["offsets"])):
+        # Some instructions access multiple memory regions
+        # because they both read and then back write to memory
+        # such as `MCOPY`, `CALL` etc. The regions gets flattened
+        # for each instruction in the output.
+        for memory_access in instruction["access_regions"]:
 
             row = {
                 "transaction_id": transaction["id"],
                 "call_depth": instruction["depth"],
                 "memory_instruction": instruction["op"],
-                "memory_access_offset": offset,
+                "memory_access_offset": memory_access["offset"],
+                "memory_access_size": memory_access["size"],
                 "memory_gas_cost": instruction["gas_cost"],
                 "pre_active_memory_size": instruction["pre_memory_size"],
                 "post_active_memory_size": instruction["post_memory_size"],

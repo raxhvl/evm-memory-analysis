@@ -54,6 +54,7 @@ class OutputHandler:
                 "call_depth",
                 "memory_instruction",
                 "memory_access_offset",
+                "memory_access_size",
                 "memory_gas_cost",
                 "pre_active_memory_size",
                 "post_active_memory_size",
