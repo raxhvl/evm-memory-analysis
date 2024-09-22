@@ -82,7 +82,7 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
                 const instruction = this.required_instructions[name];
 
                 post_memory_size =  pre_memory_size =  log.memory.length();
-                is_fixed_size = instruction.access_type == "{MEMORY_ACCESS_SIZE.FIXED.value}"
+                is_fixed_size = instruction.access_size == "{MEMORY_ACCESS_SIZE.FIXED.value}"
                 access_regions = []
 
                 // post_memory_size is the highest offset accessed by the instruction.

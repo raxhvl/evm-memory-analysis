@@ -77,10 +77,10 @@ async def get_call_frames_from_transaction(
             row = {
                 "transaction_id": transaction["id"],
                 "call_depth": instruction["depth"],
-                "memory_instruction": instruction["op"],
+                "opcode": instruction["op"],
                 "memory_access_offset": memory_access["offset"],
                 "memory_access_size": memory_access["size"],
-                "memory_gas_cost": instruction["gas_cost"],
+                "opcode_gas_cost": instruction["gas_cost"],
                 "pre_active_memory_size": instruction["pre_memory_size"],
                 "post_active_memory_size": instruction["post_memory_size"],
                 "memory_expansion": instruction["memory_expansion"],

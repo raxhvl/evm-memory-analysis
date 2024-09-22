@@ -52,10 +52,10 @@ class OutputHandler:
             FileType.CALL_FRAME: [
                 "transaction_id",
                 "call_depth",
-                "memory_instruction",
+                "opcode",
                 "memory_access_offset",
                 "memory_access_size",
-                "memory_gas_cost",
+                "opcode_gas_cost",
                 "pre_active_memory_size",
                 "post_active_memory_size",
                 "memory_expansion",
