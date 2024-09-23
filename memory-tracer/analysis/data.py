@@ -23,7 +23,10 @@ def get_frame(start_block, end_block):
     # Convert columns to appropriate types
     merged_data["block"] = merged_data["block"].astype(int)
     merged_data["tx_gas"] = merged_data["tx_gas"].astype(int)
-    merged_data["memory_gas_cost"] = merged_data["memory_gas_cost"].astype(int)
+    merged_data["call_depth"] = merged_data["call_depth"].astype(int)
+    merged_data["memory_access_offset"] = merged_data["memory_access_offset"].astype(int)
+    merged_data["memory_access_size"] = merged_data["memory_access_size"].astype(int)
+    merged_data["opcode_gas_cost"] = merged_data["opcode_gas_cost"].astype(int)
     merged_data["pre_active_memory_size"] = merged_data["pre_active_memory_size"].astype(int)
     merged_data["post_active_memory_size"] = merged_data["post_active_memory_size"].astype(int)
     merged_data["memory_expansion"] = merged_data["memory_expansion"].astype(int)
