@@ -27,7 +27,6 @@ Copy the `.env` file from the provided example and add the RPC endpoint:
 cp .env.example .env
 ```
 
-
 ## Usage
 
 ### Command-Line Arguments
@@ -54,3 +53,10 @@ To view the script's resource consumption, use the following command:
 ./run.sh <start_block> <end_block>
 
 ```
+
+### Output
+
+The script generates two gzip files in the `data/<start_block>_to_<end_block>` directory:
+
+- `transactions.csv.gzip`: Contains the summary of transactions.
+- `callframes.csv.gzip`: Contains the memory usage of each call frames from of the captured transactions.
