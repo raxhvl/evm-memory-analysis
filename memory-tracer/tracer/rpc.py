@@ -86,14 +86,14 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
                 access_regions = []
 
                 // post_memory_size is the highest offset accessed by the instruction.
-                for(input in instruction.stack_input_positions){{
+                instruction.stack_input_positions.forEach( input =>{{
                     offset = log.stack.peek(input.offset);
                     size = is_fixed_size ? instruction.size :
                            log.stack.peek(input.size);
 
                     post_memory_size = Math.max(post_memory_size, offset + size);
                     access_regions.push({{offset, size}});
-                }}
+                }});
 
                 // Ensure post_memory_size is a multiple of 32 (rounded up)
                 post_memory_size = Math.ceil(post_memory_size / 32) * 32;
