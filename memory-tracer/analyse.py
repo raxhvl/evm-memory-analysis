@@ -1,6 +1,9 @@
 import argparse
 
+import pandas as pd
+
 from analysis.data import get_frame
+from analysis.plot import plot_normal_distribution, plot_top_values
 
 # Command-line arguments parsing
 if __name__ == "__main__":
@@ -16,4 +19,19 @@ if __name__ == "__main__":
         raise ValueError("Start block should be less than or equal to end block number")
 
     frame = get_frame(start_block, end_block)
-    print(frame)
+    opcodes = frame.loc[(frame["memory_access_size"] == 0) & (frame["opcode"] == "5e")]
+
+    print(len(opcodes))
+
+    # Split the 'stack' column and extract the 5th and 7th values
+    stack_values = opcodes["stack"].str.split(",", expand=True)
+    opcodes["offset"] = stack_values[0]
+    opcodes["size"] = stack_values[2]
+
+    opcodes = opcodes.loc[opcodes["size"] == "0"]
+    print(len(opcodes))
+
+    # Set display options
+    pd.set_option("display.max_colwidth", None)
+    print(opcodes[["tx_hash", "call_depth", "size"]])
+    # plot_top_values(frame, "opcode", "charts/memory_access_offset.png")
