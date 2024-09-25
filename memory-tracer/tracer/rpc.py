@@ -92,7 +92,9 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
                            log.stack.peek(input.size);
 
                     post_memory_size = Math.max(post_memory_size, offset + size);
-                    access_regions.push({{offset, size}});
+                    if(size > 0){{
+                        access_regions.push({{offset, size}});
+                    }}
                 }});
 
                 // Ensure post_memory_size is a multiple of 32 (rounded up)
