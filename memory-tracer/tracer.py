@@ -10,7 +10,7 @@ from tracer.pipeline import schedule_rpc_tasks
 # Configure logging
 logging.basicConfig(
     filename="trace.log",
-    level=logging.INFO,
+    level=logging.ERROR,
     format="%(asctime)s - %(levelname)s - %(message)s",
     filemode="a",  # Append mode
 )
