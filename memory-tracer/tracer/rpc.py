@@ -91,7 +91,9 @@ async def get_transaction_trace(tx_hash: str, session: ClientSession) -> dict:
                     size = is_fixed_size ? instruction.size :
                            log.stack.peek(input.size);
 
-                    post_memory_size = Math.max(post_memory_size, offset + size);
+                    if(size>0){{
+                        post_memory_size = Math.max(post_memory_size, offset + size);
+                    }}
                     access_regions.push({{offset, size}});
                 }});
 
