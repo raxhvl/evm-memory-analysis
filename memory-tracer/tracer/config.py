@@ -138,7 +138,7 @@ INSTRUCTIONS = {
         "stack_input_positions": [{"offset": 2, "size": 3}, {"offset": 4, "size": 5}],
     },
     "REVERT": {
-        "opcode": "fa",
+        "opcode": "fd",
         "access_size": MEMORY_ACCESS_SIZE.VARIABLE.value,
         "stack_input_positions": [{"offset": 0, "size": 1}],
     },
